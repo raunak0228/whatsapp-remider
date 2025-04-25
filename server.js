@@ -7,6 +7,10 @@ const { GoogleSpreadsheet } = require('google-spreadsheet');
 const admin = require('firebase-admin');
 require('dotenv').config();
 
+// Initialize logging functions
+const logger = (message) => console.log(`[${new Date().toISOString()}] ${message}`);
+const errorLogger = (message, error) => console.error(`[ERROR ${new Date().toISOString()}] ${message}`, error);
+
 // Initialize Firebase Admin
 const serviceAccount = require('./serviceAccountKey.json');
 admin.initializeApp({
@@ -35,10 +39,6 @@ try {
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Simple logging
-const logger = (message) => console.log(`[${new Date().toISOString()}] ${message}`);
-const errorLogger = (message, error) => console.error(`[ERROR ${new Date().toISOString()}] ${message}`, error);
 
 // Twilio setup
 if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
