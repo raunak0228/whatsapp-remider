@@ -13,6 +13,25 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
+// Load Google credentials from environment variable or file
+let googleCredentials;
+try {
+  if (process.env.GOOGLE_CREDENTIALS) {
+    googleCredentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    logger('Loaded Google credentials from environment variable');
+  } else {
+    const credsPath = path.join(__dirname, 'credentials.json');
+    if (!fs.existsSync(credsPath)) {
+      throw new Error('Google credentials not found in environment or file');
+    }
+    googleCredentials = require(credsPath);
+    logger('Loaded Google credentials from file');
+  }
+} catch (error) {
+  errorLogger('Failed to load Google credentials:', error);
+  process.exit(1);
+}
+
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -262,26 +281,18 @@ app.get('/result', async (req, res) => {
     return res.redirect('/result?status=error&message=Google Sheet ID is required');
   }
 
-  const credsPath = path.join(__dirname, 'credentials.json');
-
-  if (!fs.existsSync(credsPath)) {
-    return res.redirect('/result?status=error&message=Google Sheets credentials file missing');
-  }
-
-  // Tracking stats
-  let scheduled = 0;
-  let failed = 0;
-  let skipped = 0;
-
   try {
-    // Load Google credentials
-    const creds = require(credsPath);
     const doc = new GoogleSpreadsheet(sheetId);
 
-    await doc.useServiceAccountAuth({
-      client_email: creds.client_email,
-      private_key: creds.private_key.replace(/\\n/g, '\n'),
-    });
+    try {
+      await doc.useServiceAccountAuth({
+        client_email: googleCredentials.client_email,
+        private_key: googleCredentials.private_key.replace(/\\n/g, '\n'),
+      });
+    } catch (authError) {
+      errorLogger('Authentication failed:', authError);
+      return res.redirect('/result?status=error&message=Failed to authenticate with Google Sheets. Please check your credentials.');
+    }
     
     await doc.loadInfo();
     logger(`Connected to spreadsheet: ${doc.title}`);
@@ -292,6 +303,10 @@ app.get('/result', async (req, res) => {
     logger(`Fetched ${rows.length} rows from the sheet`);
 
     // Process each row
+    let scheduled = 0;
+    let failed = 0;
+    let skipped = 0;
+
     for (const row of rows) {
       try {
         const name = row.Name || '';
