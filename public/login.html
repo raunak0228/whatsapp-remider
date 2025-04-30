@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login - WhatsApp Sheet Scheduler</title>
+  <title>Login - WhatsApp Scheduler</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
@@ -28,13 +28,13 @@
       -webkit-backdrop-filter: blur(15px);
       box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
       padding: 2rem;
-      max-width: 500px;
+      max-width: 400px;
       width: 100%;
       border: 1px solid rgba(255, 255, 255, 0.18);
       animation: fadeIn 1.2s ease-in-out;
     }
     h1 {
-      font-size: 2.3rem;
+      font-size: 2.5rem;
       font-weight: 700;
       background: -webkit-linear-gradient(#00c6ff, #0072ff);
       -webkit-background-clip: text;
@@ -50,6 +50,7 @@
       color: #fff;
       width: 100%;
       transition: 0.3s ease;
+      animation: glow 2s infinite alternate;
     }
     .btn-glow:hover {
       box-shadow: 0 0 20px rgba(0, 198, 255, 0.6);
@@ -81,7 +82,7 @@
       display: flex;
       align-items: center;
       text-align: center;
-      margin: 25px 0;
+      margin: 20px 0;
     }
     .divider::before, .divider::after {
       content: "";
@@ -129,6 +130,10 @@
       margin-bottom: 15px;
       display: none;
     }
+    @keyframes glow {
+      from { box-shadow: 0 0 5px #00c6ff; }
+      to { box-shadow: 0 0 20px #0072ff; }
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
@@ -137,8 +142,8 @@
 </head>
 <body>
   <div class="glass-card">
-    <h1>Sign In</h1>
-    <p class="text-center text-light mb-4">Access your WhatsApp Scheduler</p>
+    <h1>📲 WhatsApp Scheduler</h1>
+    <p class="text-center text-light mb-4">Login to schedule your WhatsApp messages</p>
     
     <div id="errorMessage" class="error-message">
       <i class="bi bi-exclamation-triangle-fill"></i> <span id="errorText"></span>
@@ -146,11 +151,13 @@
     
     <form id="loginForm">
       <div class="mb-3">
-        <input type="email" class="form-control mb-3" id="email" placeholder="Email address" required>
+        <input type="email" class="form-control" id="email" placeholder="Email address" required>
+      </div>
+      <div class="mb-3">
         <input type="password" class="form-control" id="password" placeholder="Password" required>
       </div>
       <button type="submit" class="btn btn-glow mb-3">
-        <i class="bi bi-box-arrow-in-right"></i> Sign In
+        <i class="bi bi-box-arrow-in-right"></i> Login
       </button>
     </form>
     
@@ -158,47 +165,58 @@
       <span>OR</span>
     </div>
     
-    <button id="googleSignIn" class="btn btn-google">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" class="google-icon">
-      Sign in with Google
-    </button>
+    <div class="mb-3">
+      <button id="googleLogin" class="btn btn-glow">
+        <i class="bi bi-google"></i> Login with Google
+      </button>
+    </div>
     
-    <div class="toggle-link">
-      Don't have an account? <a href="/register">Sign Up</a>
+    <div class="text-center mt-3">
+      <a href="/register" class="text-light">Don't have an account? Register</a>
     </div>
   </div>
 
-  <script type="module">
-    // Import Firebase
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
-
-    // Firebase configuration - replace with your project details
-    const firebaseConfig = {
-      apiKey: "AIzaSyDwtNar3TOFPdhimkLkcK7CEdeU1-wEheQ",
-      authDomain: "whatsapp-ab87e.firebaseapp.com",
-      projectId: "whatsapp-ab87e",
-      storageBucket: "whatsapp-ab87e.firebasestorage.app",
-      messagingSenderId: "388788708193",
-      appId: "1:388788708193:web:889edebe3708fe3cdf9b20"
-    };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const googleProvider = new GoogleAuthProvider();
-
-    // Store the token in localStorage after successful login
-    function storeAuthToken(token) {
-      localStorage.setItem('firebaseAuthToken', token);
-    }
-
+  <script>
+    // Initialize Firebase Auth
+    const auth = firebase.auth();
+    let isRedirecting = false; // Flag to prevent multiple redirects
+    
     // Show error message
     function showError(message) {
       const errorElement = document.getElementById('errorMessage');
       const errorText = document.getElementById('errorText');
       errorText.textContent = message;
       errorElement.style.display = 'block';
+    }
+
+    // Handle successful authentication
+    async function handleSuccessfulAuth(user) {
+      if (isRedirecting) return; // Prevent multiple redirects
+      isRedirecting = true;
+      
+      try {
+        const idToken = await user.getIdToken();
+        
+        // Send token to server
+        const response = await fetch('/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ idToken })
+        });
+        
+        if (response.ok) {
+          window.location.href = '/home';
+        } else {
+          showError('Login failed. Please try again.');
+          isRedirecting = false;
+        }
+      } catch (error) {
+        console.error('Auth error:', error);
+        showError('An error occurred during authentication');
+        isRedirecting = false;
+      }
     }
 
     // Email/Password Login
@@ -208,29 +226,8 @@
       const password = document.getElementById('password').value;
       
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        // Get ID token for server validation
-        const idToken = await userCredential.user.getIdToken();
-        
-        // Store the token in localStorage
-        storeAuthToken(idToken);
-        
-        // Send token to server for verification
-        const response = await fetch('/verify-token', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ idToken })
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-          // Redirect to home page
-          window.location.href = '/home';
-        } else {
-          showError('Server verification failed. Please try again.');
-        }
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        await handleSuccessfulAuth(userCredential.user);
       } catch (error) {
         let errorMessage;
         switch (error.code) {
@@ -252,67 +249,25 @@
         showError(errorMessage);
       }
     });
-
-    // Google Sign-in
-    document.getElementById('googleSignIn').addEventListener('click', async () => {
+    
+    // Google Sign In
+    document.getElementById('googleLogin').addEventListener('click', async () => {
       try {
-        const result = await signInWithPopup(auth, googleProvider);
-        // Get ID token for server validation
-        const idToken = await result.user.getIdToken();
-        
-        // Store the token in localStorage
-        storeAuthToken(idToken);
-        
-        // Send token to server for verification
-        const response = await fetch('/verify-token', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ idToken })
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-          // Redirect to home page
-          window.location.href = '/home';
-        } else {
-          showError('Server verification failed. Please try again.');
-        }
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const result = await auth.signInWithPopup(provider);
+        await handleSuccessfulAuth(result.user);
       } catch (error) {
-        console.error(error);
-        showError('Google sign-in failed. Please try again.');
+        console.error('Login error:', error);
+        showError('Login failed. Please try again.');
       }
     });
 
-    // Functions for use with protected routes
-    // Get the stored token
-    function getAuthToken() {
-      return localStorage.getItem('firebaseAuthToken');
-    }
-
-    // Function to include the token with fetch requests
-    async function fetchWithAuth(url, options = {}) {
-      const token = getAuthToken();
-      
-      if (!token) {
-        console.error("No auth token found. Please login first.");
-        // Redirect to login page
-        window.location.href = '/';
-        return;
+    // Check if user is already logged in
+    auth.onAuthStateChanged((user) => {
+      if (user && !isRedirecting) {
+        handleSuccessfulAuth(user);
       }
-      
-      // Set up headers with authorization
-      const headers = {
-        ...options.headers,
-        'Authorization': `Bearer ${token}`
-      };
-      
-      return fetch(url, {
-        ...options,
-        headers
-      });
-    }
+    });
   </script>
 </body>
 </html>

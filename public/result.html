@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📊 Scheduling Results</title>
+  <title>Result - WhatsApp Scheduler</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
@@ -56,24 +56,15 @@
       box-shadow: 0 0 20px rgba(0, 198, 255, 0.6);
       transform: scale(1.03);
     }
-    .result-item {
-      background-color: rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      margin-bottom: 15px;
-      padding: 15px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    .status-card {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 15px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
     }
-    .result-icon {
-      font-size: 1.5rem;
-      margin-right: 10px;
-    }
-    .error-container {
-      background-color: rgba(220, 53, 69, 0.2);
-      border-radius: 10px;
-      padding: 15px;
-      margin-bottom: 20px;
+    .status-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
     }
     @keyframes glow {
       from { box-shadow: 0 0 5px #00c6ff; }
@@ -83,103 +74,72 @@
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    @media screen and (max-width: 600px) {
-      h1 { font-size: 2rem; }
+    .spinner-border {
+      width: 3rem;
+      height: 3rem;
     }
   </style>
 </head>
 <body>
   <div class="glass-card">
-    <h1>📤 Scheduling Results</h1>
-    <p class="text-center text-light mb-4">WhatsApp Message Scheduling Summary</p>
+    <h1>Processing Status</h1>
     
-    <!-- Success Results -->
-    <div id="success-results">
-      <div class="result-item">
-        <div>
-          <i class="bi bi-check-circle-fill text-success result-icon"></i>
-          <span>Messages Scheduled Successfully</span>
+    <div id="statusCard" class="status-card text-center">
+      <div id="statusIcon" class="status-icon">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
         </div>
-        <span id="scheduled">0</span>
       </div>
-      <div class="result-item">
-        <div>
-          <i class="bi bi-exclamation-triangle-fill text-warning result-icon"></i>
-          <span>Rows Skipped</span>
-        </div>
-        <span id="skipped">0</span>
-      </div>
-      <div class="result-item">
-        <div>
-          <i class="bi bi-x-circle-fill text-danger result-icon"></i>
-          <span>Rows Failed</span>
-        </div>
-        <span id="failed">0</span>
-      </div>
-      <div class="text-center mt-4">
-        <a href="/home" class="btn btn-glow">
-          <i class="bi bi-arrow-left"></i> Back to Home
-        </a>
-      </div>
+      <h3 id="statusTitle">Processing Your Request</h3>
+      <p id="statusMessage" class="mb-0">Please wait while we process your Google Sheet...</p>
     </div>
-    
-    <!-- Error Results -->
-    <div id="error-results" style="display: none;">
-      <div class="error-container">
-        <i class="bi bi-exclamation-triangle-fill text-danger result-icon"></i>
-        <span id="error-message">An error occurred</span>
-      </div>
-      <div class="text-center mt-4">
-        <a href="/home" class="btn btn-glow">
-          <i class="bi bi-arrow-left"></i> Back to Home
-        </a>
-      </div>
-    </div>
+
+    <button onclick="window.location.href='/home'" class="btn btn-glow">
+      <i class="bi bi-arrow-left"></i> Back to Home
+    </button>
   </div>
 
   <script>
-    function updateResults() {
-      const successResults = document.getElementById('success-results');
-      const errorResults = document.getElementById('error-results');
-      const errorMessage = document.getElementById('error-message');
-      const scheduled = document.getElementById('scheduled');
-      const skipped = document.getElementById('skipped');
-      const failed = document.getElementById('failed');
-
-      if (!successResults || !errorResults || !errorMessage || !scheduled || !skipped || !failed) {
-        console.error('Required elements not found');
-        return;
+    // Check authentication status
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = '/login';
       }
-
-      // Parse URL parameters
-      const urlParams = new URLSearchParams(window.location.search);
-      const status = urlParams.get('status');
-      
-      if (status === 'error') {
-        const message = urlParams.get('message') || 'An unknown error occurred';
-        errorMessage.textContent = message;
-        successResults.style.display = 'none';
-        errorResults.style.display = 'block';
-      } else {
-        scheduled.textContent = urlParams.get('scheduled') || '0';
-        skipped.textContent = urlParams.get('skipped') || '0';
-        failed.textContent = urlParams.get('failed') || '0';
-        successResults.style.display = 'block';
-        errorResults.style.display = 'none';
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check authentication status
-      firebase.auth().onAuthStateChanged((user) => {
-        if (!user) {
-          window.location.href = '/login';
-          return;
-        }
-        // Update results after authentication check
-        updateResults();
-      });
     });
+
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const status = urlParams.get('status');
+    const message = urlParams.get('message');
+    const scheduled = urlParams.get('scheduled');
+    const skipped = urlParams.get('skipped');
+    const failed = urlParams.get('failed');
+
+    // Update status display
+    const statusIcon = document.getElementById('statusIcon');
+    const statusTitle = document.getElementById('statusTitle');
+    const statusMessage = document.getElementById('statusMessage');
+
+    if (status === 'success') {
+      statusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+      statusTitle.textContent = 'Success!';
+      statusMessage.innerHTML = `
+        ${message}<br>
+        <div class="mt-3">
+          <span class="text-success">Scheduled: ${scheduled}</span> |
+          <span class="text-warning">Skipped: ${skipped}</span> |
+          <span class="text-danger">Failed: ${failed}</span>
+        </div>
+      `;
+    } else if (status === 'error') {
+      statusIcon.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
+      statusTitle.textContent = 'Error';
+      statusMessage.textContent = message || 'An error occurred while processing your request.';
+    } else if (status === 'processing') {
+      statusIcon.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
+      statusTitle.textContent = 'Processing';
+      statusMessage.textContent = 'Your request is being processed. Please wait...';
+    }
   </script>
 </body>
 </html> 

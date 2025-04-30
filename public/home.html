@@ -139,6 +139,29 @@
       <li>🕒 <strong>Date</strong> (valid ISO format)</li>
       <li>📌 <strong>Status</strong> (auto-updated)</li>
     </ul>
+
+    <button onclick="logout()" class="btn btn-danger mt-4">
+      <i class="bi bi-box-arrow-right"></i> Logout
+    </button>
   </div>
+
+  <script>
+    // Check authentication status
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = '/login';
+      }
+    });
+
+    // Logout function
+    async function logout() {
+      try {
+        await firebase.auth().signOut();
+        window.location.href = '/login';
+      } catch (error) {
+        console.error('Logout error:', error);
+      }
+    }
+  </script>
 </body>
 </html> 
