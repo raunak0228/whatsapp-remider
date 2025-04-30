@@ -5,7 +5,33 @@ const path = require('path');
 const fs = require('fs');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const admin = require('firebase-admin');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
+
+// Add authentication middleware
+const checkAuth = async (req, res, next) => {
+  try {
+    const idToken = req.cookies?.session || req.headers.authorization?.split('Bearer ')[1];
+    
+    if (!idToken) {
+      return res.redirect('/login');
+    }
+
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    req.user = decodedToken;
+    next();
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.redirect('/login');
+  }
+};
+
+// Add caching configuration
+const CACHE = {
+  sheets: new Map(),
+  ttl: 5 * 60 * 1000, // 5 minutes
+  processing: new Set() // Track sheets being processed
+};
 
 // Initialize logging functions
 const logger = (message) => console.log(`[${new Date().toISOString()}] ${message}`);
@@ -77,6 +103,7 @@ const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TO
 const fromNumber = process.env.TWILIO_FROM_NUMBER || 'whatsapp:+14155238886';
 
 // Middleware
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, path) => {
     if (path.endsWith('.js')) {
@@ -100,163 +127,9 @@ app.get('/register', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
-// Home Page
-app.get('/home', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>📊 WhatsApp Sheet Scheduler</title>
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-      <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
-      <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
-      <script src="firebaseConfig.js"></script>
-      <script>
-      // Check authentication status
-      firebase.auth().onAuthStateChanged((user) => {
-        if (!user) {
-          window.location.href = '/login';
-        }
-      });
-
-      // Logout function
-      async function logout() {
-        try {
-          await firebase.auth().signOut();
-          localStorage.removeItem('idToken');
-          window.location.href = '/login';
-        } catch (error) {
-          console.error('Logout error:', error);
-        }
-      }
-      </script>
-      <style>
-        body {
-          font-family: 'Outfit', sans-serif;
-          background: linear-gradient(145deg, #0f2027, #203a43, #2c5364);
-          color: #fff;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 2rem;
-        }
-        .glass-card {
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 20px;
-          backdrop-filter: blur(15px);
-          -webkit-backdrop-filter: blur(15px);
-          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-          padding: 2rem;
-          max-width: 600px;
-          width: 100%;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          animation: fadeIn 1.2s ease-in-out;
-        }
-        h1 {
-          font-size: 2.5rem;
-          font-weight: 700;
-          background: -webkit-linear-gradient(#00c6ff, #0072ff);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          text-align: center;
-        }
-        .btn-glow {
-          background: linear-gradient(to right, #00c6ff, #0072ff);
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 12px;
-          font-weight: 600;
-          color: #fff;
-          width: 100%;
-          transition: 0.3s ease;
-          animation: glow 2s infinite alternate;
-        }
-        .btn-glow:hover {
-          box-shadow: 0 0 20px rgba(0, 198, 255, 0.6);
-          transform: scale(1.03);
-        }
-        .btn-danger {
-          background: linear-gradient(to right, #ff416c, #ff4b2b);
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 12px;
-          font-weight: 600;
-          color: #fff;
-          width: 100%;
-          transition: 0.3s ease;
-        }
-        .btn-danger:hover {
-          box-shadow: 0 0 20px rgba(255, 65, 108, 0.6);
-          transform: scale(1.03);
-        }
-        @keyframes glow {
-          from { box-shadow: 0 0 5px #00c6ff; }
-          to { box-shadow: 0 0 20px #0072ff; }
-        }
-        .info-list li {
-          background-color: rgba(255, 255, 255, 0.08);
-          border-radius: 10px;
-          margin-bottom: 10px;
-          padding: 10px;
-        }
-        .form-control {
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: #fff;
-          border-radius: 10px;
-          padding: 0.75rem;
-        }
-        .form-control:focus {
-          background: rgba(255, 255, 255, 0.15);
-          border-color: rgba(0, 198, 255, 0.5);
-          color: #fff;
-          box-shadow: 0 0 10px rgba(0, 198, 255, 0.2);
-        }
-        .form-control::placeholder {
-          color: rgba(255, 255, 255, 0.5);
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @media screen and (max-width: 600px) {
-          h1 { font-size: 2rem; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="glass-card">
-        <h1>📲 WhatsApp Scheduler</h1>
-        <p class="text-center text-light mb-4">Send automated WhatsApp messages via <strong>Google Sheets</strong>.</p>
-        
-        <form action="/result" method="GET" class="mb-4">
-          <div class="mb-3">
-            <label for="sheetId" class="form-label">Google Sheet ID</label>
-            <input type="text" class="form-control" id="sheetId" name="sheetId" placeholder="Enter your Google Sheet ID" required>
-            <small class="text-light">You can find this in your Google Sheet URL: https://docs.google.com/spreadsheets/d/<strong>YOUR_SHEET_ID</strong>/edit</small>
-          </div>
-          <button type="submit" class="btn btn-glow">
-            <i class="bi bi-send-fill"></i> Schedule Messages
-          </button>
-        </form>
-
-        <h5 class="text-info mt-4 mb-2">📋 Required Columns:</h5>
-        <ul class="info-list list-unstyled">
-          <li>👤 <strong>Name</strong></li>
-          <li>📱 <strong>Number</strong> (e.g. +91XXXXXXXXXX)</li>
-          <li>💬 <strong>Message</strong></li>
-          <li>🕒 <strong>Date</strong> (valid ISO format)</li>
-          <li>📌 <strong>Status</strong> (auto-updated)</li>
-        </ul>
-      </div>
-    </body>
-    </html>
-  `);
+// Home Page - Protected route
+app.get('/home', checkAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'home.html'));
 });
 
 // Test WhatsApp Message
@@ -300,38 +173,71 @@ app.post('/send-test', async (req, res) => {
   }
 });
 
-// Google Sheet Scheduler Route
-app.get('/result', async (req, res) => {
-  const sheetId = req.query.sheetId;
+// Helper function to get cached sheet data
+async function getSheetData(sheetId) {
+  const now = Date.now();
+  const cached = CACHE.sheets.get(sheetId);
   
+  // Clear cache if sheet is being processed
+  if (CACHE.processing.has(sheetId)) {
+    CACHE.sheets.delete(sheetId);
+  }
+  
+  // If not cached or cache expired, fetch new data
+  if (!cached || (now - cached.timestamp) >= CACHE.ttl) {
+    const doc = new GoogleSpreadsheet(sheetId);
+    await doc.useServiceAccountAuth({
+      client_email: googleCredentials.client_email,
+      private_key: googleCredentials.private_key,
+    });
+    await doc.loadInfo();
+    
+    const sheet = doc.sheetsByIndex[0];
+    const rows = await sheet.getRows();
+    
+    const data = { doc, sheet, rows };
+    CACHE.sheets.set(sheetId, {
+      data,
+      timestamp: now
+    });
+    
+    return data;
+  }
+  
+  logger('Using cached sheet data');
+  return cached.data;
+}
+
+// Result Page - Protected route
+app.get('/result', checkAuth, async (req, res) => {
+  const sheetId = req.query.sheetId;
+  const status = req.query.status;
+  const message = req.query.message;
+
   if (!sheetId) {
     return res.redirect('/result?status=error&message=Google Sheet ID is required');
   }
 
+  // If this is just a status check, return the result page
+  if (status) {
+    return res.sendFile(path.join(__dirname, 'public', 'result.html'));
+  }
+
+  // Check if sheet is already being processed
+  if (CACHE.processing.has(sheetId)) {
+    logger(`Sheet ${sheetId} is already being processed`);
+    return res.redirect(`/result?status=processing&sheetId=${sheetId}`);
+  }
+
   try {
-    const doc = new GoogleSpreadsheet(sheetId);
-
-    try {
-      // Log the attempt to authenticate
-      logger(`Attempting to authenticate with Google Sheets using service account: ${googleCredentials.client_email}`);
-      
-      await doc.useServiceAccountAuth({
-        client_email: googleCredentials.client_email,
-        private_key: googleCredentials.private_key,
-      });
-      
-      logger('Successfully authenticated with Google Sheets');
-    } catch (authError) {
-      errorLogger('Authentication failed:', authError);
-      return res.redirect('/result?status=error&message=Failed to authenticate with Google Sheets. Please check your credentials configuration.');
-    }
+    // Clear any existing cache for this sheet
+    CACHE.sheets.delete(sheetId);
     
-    await doc.loadInfo();
+    // Mark sheet as being processed
+    CACHE.processing.add(sheetId);
+    
+    const { doc, sheet, rows } = await getSheetData(sheetId);
     logger(`Connected to spreadsheet: ${doc.title}`);
-
-    // Get rows from the first sheet
-    const sheet = doc.sheetsByIndex[0];
-    const rows = await sheet.getRows();
     logger(`Fetched ${rows.length} rows from the sheet`);
 
     // Process each row
@@ -399,38 +305,40 @@ app.get('/result', async (req, res) => {
       }
     }
 
-    // Redirect to result page with success data
-    res.redirect(`/result?scheduled=${scheduled}&skipped=${skipped}&failed=${failed}`);
+    // Remove from processing set
+    CACHE.processing.delete(sheetId);
+    
+    return res.redirect(`/result?status=success&message=Successfully processed ${rows.length} rows&sheetId=${sheetId}&scheduled=${scheduled}&skipped=${skipped}&failed=${failed}`);
   } catch (error) {
+    // Remove from processing set on error
+    CACHE.processing.delete(sheetId);
+    
     errorLogger('Error processing Google Sheet:', error);
-    res.redirect(`/result?status=error&message=${encodeURIComponent(error.message)}`);
+    return res.redirect(`/result?status=error&message=${encodeURIComponent(error.message)}&sheetId=${sheetId}`);
   }
 });
 
-// Verify Firebase Token
-app.post('/verify-token', async (req, res) => {
+// Login route
+app.post('/login', async (req, res) => {
   try {
     const { idToken } = req.body;
-    
-    if (!idToken) {
-      return res.status(400).json({ success: false, message: 'No token provided' });
-    }
-
-    // Verify the token with Firebase Admin SDK
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     
-    if (decodedToken) {
-      res.json({ success: true, uid: decodedToken.uid });
-    } else {
-      res.status(401).json({ success: false, message: 'Invalid token' });
-    }
+    // Set session cookie
+    res.cookie('session', idToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+    
+    res.json({ success: true });
   } catch (error) {
-    console.error('Token verification error:', error);
-    res.status(401).json({ success: false, message: 'Token verification failed' });
+    console.error('Login error:', error);
+    res.status(401).json({ success: false, message: 'Authentication failed' });
   }
 });
 
-// Logout Route
+// Logout route
 app.post('/logout', (req, res) => {
   res.clearCookie('session');
   res.redirect('/login');
